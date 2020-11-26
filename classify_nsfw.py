@@ -109,15 +109,17 @@ def load_model():
     return nsfw_net, caffe_transformer
 
 
-def classify(image_data, model, transformer):
+def classify(image_data, model, transformer, silent=False):
     img_name, binary = image_data
     scores = caffe_preprocess_and_compute(
-        binary,
-        caffe_transformer=transformer,
-        caffe_net=model,
-        output_layers=["prob"],
+        binary, caffe_transformer=transformer, caffe_net=model, output_layers=["prob"],
     )
-    print "Image:", img_name, " - NSFW score:  ", scores[1]
+
+    if not silent:
+        verdict = "NSFW" if scores[1] >= 0.3 else "OK"
+        print "Image:", img_name, "\tNSFW score:  ", scores[
+            1
+        ], "\t -> Verdict: ", verdict
 
 
 def benchmark(model, transformer, iters=1000):
@@ -126,8 +128,16 @@ def benchmark(model, transformer, iters=1000):
 
     import timeit
     import random
-    runtime = timeit.timeit(
-        lambda: classify(random.choice(image_data), model, transformer), number=iters
+
+    runtime = min(
+        timeit.repeat(
+            lambda: classify(
+                random.choice(image_data), model, transformer, silent=iters > 100
+            ),
+            setup="gc.enable()",
+            repeat=iters,
+            number=1,
+        )
     )
     print "runtime: ", runtime, "s"
 
@@ -135,14 +145,9 @@ def benchmark(model, transformer, iters=1000):
 def main(argv):
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--input_file", default=None, help="classify a single image")
     parser.add_argument(
-        "--input_file",
-        default=None,
-        help="classify a single image"
-    )
-    parser.add_argument(
-        "--benchmark",
-        help="benchmark with the provided number of runs"
+        "--benchmark", help="benchmark with the provided number of runs"
     )
     args = parser.parse_args()
 
